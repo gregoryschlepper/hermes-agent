@@ -2882,12 +2882,13 @@ class AIAgent:
         review_memory: bool = False,
         review_skills: bool = False,
     ) -> None:
-        """Spawn a background thread to review the conversation for memory/skill saves.
+        """Fork a background review thread using a separate AIAgent session.
 
-        Creates a full AIAgent fork with the same model, tools, and context as the
-        main session. The review prompt is appended as the next user turn in the
-        forked conversation. Writes directly to the shared memory/skill stores.
-        Never modifies the main conversation history or produces user-visible output.
+        Applies ``memory.review`` / ``skills.review`` model and provider overrides
+        from config when present, otherwise uses the main agent settings. Enables
+        only the relevant memory/skills toolsets, passes a capped recent history,
+        and writes through the shared memory/skill stores. Stdout/stderr from the
+        review run are suppressed (no streamed review output in the main chat).
         """
         import threading
 
@@ -2916,12 +2917,15 @@ class AIAgent:
                 if review_memory and review_skills:
                     _rk = "memory+skills"
                     _blocks = (_mrv, _srv)
+                    _enabled_toolsets = ["memory", "skills"]
                 elif review_memory:
                     _rk = "memory"
                     _blocks = (_mrv,)
+                    _enabled_toolsets = ["memory"]
                 else:
                     _rk = "skills"
                     _blocks = (_srv,)
+                    _enabled_toolsets = ["skills"]
                 eff_model = self.model
                 eff_provider = self.provider
                 eff_base = self.base_url
@@ -2960,13 +2964,21 @@ class AIAgent:
                         eff_key = _k
                         _key_log = "env:%s" % es
                         break
+                review_history = (
+                    messages_snapshot[-12:]
+                    if len(messages_snapshot) > 12
+                    else messages_snapshot
+                )
                 logger.info(
-                    "Background %s review: model=%r provider=%r base_url=%r api_key=%s",
+                    "Background review kind=%s model=%r provider=%r base_url=%r "
+                    "api_key_source=%s enabled_toolsets=%s history_len=%d",
                     _rk,
                     eff_model,
                     eff_provider,
                     eff_base,
                     _key_log,
+                    _enabled_toolsets,
+                    len(review_history),
                 )
                 with open(os.devnull, "w") as _devnull, \
                      contextlib.redirect_stdout(_devnull), \
@@ -2979,6 +2991,7 @@ class AIAgent:
                         provider=eff_provider,
                         base_url=eff_base,
                         api_key=eff_key,
+                        enabled_toolsets=_enabled_toolsets,
                     )
                     review_agent._memory_store = self._memory_store
                     review_agent._memory_enabled = self._memory_enabled
@@ -2988,7 +3001,7 @@ class AIAgent:
 
                     review_agent.run_conversation(
                         user_message=prompt,
-                        conversation_history=messages_snapshot,
+                        conversation_history=review_history,
                     )
 
                 # Scan the review agent's messages for successful tool actions
