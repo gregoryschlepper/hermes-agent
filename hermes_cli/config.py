@@ -720,6 +720,12 @@ DEFAULT_CONFIG = {
         # "hindsight", "holographic", "retaindb", "byterover".
         # Only ONE external provider is allowed at a time.
         "provider": "",
+        "review": {
+            "model": None,
+            "provider": None,
+            "base_url": None,
+            "api_key_env": None,
+        },
     },
 
     # Subagent delegation — override the provider:model used by delegate_task
@@ -784,6 +790,12 @@ DEFAULT_CONFIG = {
         # External hub installs (trusted/community sources) are always
         # scanned regardless of this setting.
         "guard_agent_created": False,
+        "review": {
+            "model": None,
+            "provider": None,
+            "base_url": None,
+            "api_key_env": None,
+        },
     },
 
     # Honcho AI-native memory -- reads ~/.honcho/config.json as single source of truth.
