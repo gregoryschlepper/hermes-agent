@@ -52,6 +52,141 @@ from utils import base_url_host_matches, base_url_hostname, normalize_proxy_env_
 
 logger = logging.getLogger(__name__)
 
+_AUXILIARY_CALLS_LOG_PATH = get_hermes_home() / "logs" / "auxiliary_calls.jsonl"
+_AUXILIARY_CALLS_LOG_LOCK = threading.Lock()
+
+
+def _safe_int(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _usage_attr(obj: Any, *names: str) -> Any:
+    for name in names:
+        if obj is None:
+            return None
+        if isinstance(obj, dict) and name in obj:
+            return obj.get(name)
+        if hasattr(obj, name):
+            return getattr(obj, name)
+    return None
+
+
+def _extract_aux_usage(response: Any) -> Dict[str, int]:
+    usage = getattr(response, "usage", None)
+    if usage is None and isinstance(response, dict):
+        usage = response.get("usage")
+
+    prompt_details = _usage_attr(usage, "prompt_tokens_details")
+    completion_details = _usage_attr(usage, "completion_tokens_details")
+
+    return {
+        "input_tokens": _safe_int(_usage_attr(usage, "prompt_tokens", "input_tokens")),
+        "output_tokens": _safe_int(_usage_attr(usage, "completion_tokens", "output_tokens")),
+        "cache_read_tokens": _safe_int(_usage_attr(prompt_details, "cached_tokens", "cache_read_tokens")),
+        "cache_write_tokens": _safe_int(
+            _usage_attr(
+                usage,
+                "cache_creation_input_tokens",
+                "cache_write_tokens",
+                "input_cached_tokens",
+            )
+        ),
+        "reasoning_tokens": _safe_int(
+            _usage_attr(
+                completion_details,
+                "reasoning_tokens",
+                "output_reasoning_tokens",
+            )
+        ),
+    }
+
+
+def _estimate_aux_cost_usd(
+    model_name: str,
+    usage: Dict[str, int],
+    *,
+    provider: Optional[str] = None,
+    base_url: Optional[str] = None,
+) -> Tuple[Optional[float], str]:
+    try:
+        from agent.usage_pricing import CanonicalUsage, estimate_usage_cost
+
+        result = estimate_usage_cost(
+            model_name or "",
+            CanonicalUsage(
+                input_tokens=usage.get("input_tokens") or 0,
+                output_tokens=usage.get("output_tokens") or 0,
+                cache_read_tokens=usage.get("cache_read_tokens") or 0,
+                cache_write_tokens=usage.get("cache_write_tokens") or 0,
+            ),
+            provider=provider,
+            base_url=base_url,
+        )
+        return float(result.amount_usd or 0.0), str(getattr(result, "status", "unknown") or "unknown")
+    except Exception:
+        return None, "unknown"
+
+
+def _append_auxiliary_call_event(
+    *,
+    task: Optional[str],
+    source_mode: str,
+    status: str,
+    started_at: float,
+    ended_at: float,
+    configured_provider: Optional[str],
+    configured_model: Optional[str],
+    resolved_provider: Optional[str],
+    resolved_model: Optional[str],
+    base_url: Optional[str],
+    response: Any = None,
+    error: Optional[Exception] = None,
+) -> None:
+    response_model = getattr(response, "model", None) if response is not None else None
+    usage = _extract_aux_usage(response)
+    estimated_cost_usd, cost_status = _estimate_aux_cost_usd(
+        response_model or resolved_model or configured_model or "",
+        usage,
+        provider=resolved_provider,
+        base_url=base_url,
+    )
+    event = {
+        "event_id": f"aux-{source_mode}-{int(started_at * 1000)}-{os.getpid()}-{threading.get_ident()}",
+        "task": task or "call",
+        "source_mode": source_mode,
+        "status": status,
+        "started_at": started_at,
+        "ended_at": ended_at,
+        "duration_ms": int(max(0.0, ended_at - started_at) * 1000),
+        "configured_provider": configured_provider or "",
+        "configured_model": configured_model or "",
+        "resolved_provider": resolved_provider or "",
+        "resolved_model": resolved_model or "",
+        "response_model": response_model or "",
+        "base_url": base_url or "",
+        "input_tokens": usage.get("input_tokens") or 0,
+        "output_tokens": usage.get("output_tokens") or 0,
+        "cache_read_tokens": usage.get("cache_read_tokens") or 0,
+        "cache_write_tokens": usage.get("cache_write_tokens") or 0,
+        "reasoning_tokens": usage.get("reasoning_tokens") or 0,
+        "estimated_cost_usd": estimated_cost_usd,
+        "cost_status": cost_status,
+        "error_message": str(error)[:500] if error else "",
+        "pid": os.getpid(),
+        "thread_id": threading.get_ident(),
+    }
+    try:
+        _AUXILIARY_CALLS_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        line = json.dumps(event, ensure_ascii=False)
+        with _AUXILIARY_CALLS_LOG_LOCK:
+            with _AUXILIARY_CALLS_LOG_PATH.open("a", encoding="utf-8") as handle:
+                handle.write(line + "\n")
+    except Exception:
+        logger.exception("Failed to append auxiliary call event for task=%s", task or "call")
+
 # Module-level flag: only warn once per process about stale OPENAI_BASE_URL.
 _stale_base_url_warned = False
 
@@ -2729,6 +2864,11 @@ def call_llm(
     Raises:
         RuntimeError: If no provider is configured.
     """
+    call_started_at = time.time()
+    task_config = _get_auxiliary_task_config(task) if task else {}
+    configured_provider = task_config.get("provider") if isinstance(task_config, dict) else provider
+    configured_model = task_config.get("model") if isinstance(task_config, dict) else model
+
     resolved_provider, resolved_model, resolved_base_url, resolved_api_key, resolved_api_mode = _resolve_task_provider_model(
         task, provider, model, base_url, api_key)
     effective_extra_body = _get_task_extra_body(task)
@@ -2817,20 +2957,61 @@ def call_llm(
 
     # Handle max_tokens vs max_completion_tokens retry, then payment fallback.
     try:
-        return _validate_llm_response(
+        response = _validate_llm_response(
             client.chat.completions.create(**kwargs), task)
+        _append_auxiliary_call_event(
+            task=task,
+            source_mode="sync",
+            status="ok",
+            started_at=call_started_at,
+            ended_at=time.time(),
+            configured_provider=configured_provider,
+            configured_model=configured_model or resolved_model or model,
+            resolved_provider=resolved_provider,
+            resolved_model=final_model,
+            base_url=_base_info or resolved_base_url,
+            response=response,
+        )
+        return response
     except Exception as first_err:
         err_str = str(first_err)
         if "max_tokens" in err_str or "unsupported_parameter" in err_str:
             kwargs.pop("max_tokens", None)
             kwargs["max_completion_tokens"] = max_tokens
             try:
-                return _validate_llm_response(
+                response = _validate_llm_response(
                     client.chat.completions.create(**kwargs), task)
+                _append_auxiliary_call_event(
+                    task=task,
+                    source_mode="sync",
+                    status="ok",
+                    started_at=call_started_at,
+                    ended_at=time.time(),
+                    configured_provider=configured_provider,
+                    configured_model=configured_model or resolved_model or model,
+                    resolved_provider=resolved_provider,
+                    resolved_model=final_model,
+                    base_url=_base_info or resolved_base_url,
+                    response=response,
+                )
+                return response
             except Exception as retry_err:
                 # If the max_tokens retry also hits a payment or connection
                 # error, fall through to the fallback chain below.
                 if not (_is_payment_error(retry_err) or _is_connection_error(retry_err)):
+                    _append_auxiliary_call_event(
+                        task=task,
+                        source_mode="sync",
+                        status="error",
+                        started_at=call_started_at,
+                        ended_at=time.time(),
+                        configured_provider=configured_provider,
+                        configured_model=configured_model or resolved_model or model,
+                        resolved_provider=resolved_provider,
+                        resolved_model=final_model,
+                        base_url=_base_info or resolved_base_url,
+                        error=retry_err,
+                    )
                     raise
                 first_err = retry_err
 
@@ -2887,8 +3068,51 @@ def call_llm(
                     tools=tools, timeout=effective_timeout,
                     extra_body=effective_extra_body,
                     base_url=str(getattr(fb_client, "base_url", "") or ""))
-                return _validate_llm_response(
-                    fb_client.chat.completions.create(**fb_kwargs), task)
+                try:
+                    response = _validate_llm_response(
+                        fb_client.chat.completions.create(**fb_kwargs), task)
+                    _append_auxiliary_call_event(
+                        task=task,
+                        source_mode="sync",
+                        status="ok",
+                        started_at=call_started_at,
+                        ended_at=time.time(),
+                        configured_provider=configured_provider,
+                        configured_model=configured_model or resolved_model or model,
+                        resolved_provider=fb_label,
+                        resolved_model=fb_model,
+                        base_url=str(getattr(fb_client, "base_url", "") or ""),
+                        response=response,
+                    )
+                    return response
+                except Exception as fallback_err:
+                    _append_auxiliary_call_event(
+                        task=task,
+                        source_mode="sync",
+                        status="error",
+                        started_at=call_started_at,
+                        ended_at=time.time(),
+                        configured_provider=configured_provider,
+                        configured_model=configured_model or resolved_model or model,
+                        resolved_provider=fb_label,
+                        resolved_model=fb_model,
+                        base_url=str(getattr(fb_client, "base_url", "") or ""),
+                        error=fallback_err,
+                    )
+                    raise
+        _append_auxiliary_call_event(
+            task=task,
+            source_mode="sync",
+            status="error",
+            started_at=call_started_at,
+            ended_at=time.time(),
+            configured_provider=configured_provider,
+            configured_model=configured_model or resolved_model or model,
+            resolved_provider=resolved_provider,
+            resolved_model=final_model,
+            base_url=_base_info or resolved_base_url,
+            error=first_err,
+        )
         raise
 
 
@@ -3038,20 +3262,61 @@ async def async_call_llm(
         kwargs["messages"] = _convert_openai_images_to_anthropic(kwargs["messages"])
 
     try:
-        return _validate_llm_response(
+        response = _validate_llm_response(
             await client.chat.completions.create(**kwargs), task)
+        _append_auxiliary_call_event(
+            task=task,
+            source_mode="async",
+            status="ok",
+            started_at=call_started_at,
+            ended_at=time.time(),
+            configured_provider=configured_provider,
+            configured_model=configured_model or resolved_model or model,
+            resolved_provider=resolved_provider,
+            resolved_model=final_model,
+            base_url=_client_base or resolved_base_url,
+            response=response,
+        )
+        return response
     except Exception as first_err:
         err_str = str(first_err)
         if "max_tokens" in err_str or "unsupported_parameter" in err_str:
             kwargs.pop("max_tokens", None)
             kwargs["max_completion_tokens"] = max_tokens
             try:
-                return _validate_llm_response(
+                response = _validate_llm_response(
                     await client.chat.completions.create(**kwargs), task)
+                _append_auxiliary_call_event(
+                    task=task,
+                    source_mode="async",
+                    status="ok",
+                    started_at=call_started_at,
+                    ended_at=time.time(),
+                    configured_provider=configured_provider,
+                    configured_model=configured_model or resolved_model or model,
+                    resolved_provider=resolved_provider,
+                    resolved_model=final_model,
+                    base_url=_client_base or resolved_base_url,
+                    response=response,
+                )
+                return response
             except Exception as retry_err:
                 # If the max_tokens retry also hits a payment or connection
                 # error, fall through to the fallback chain below.
                 if not (_is_payment_error(retry_err) or _is_connection_error(retry_err)):
+                    _append_auxiliary_call_event(
+                        task=task,
+                        source_mode="async",
+                        status="error",
+                        started_at=call_started_at,
+                        ended_at=time.time(),
+                        configured_provider=configured_provider,
+                        configured_model=configured_model or resolved_model or model,
+                        resolved_provider=resolved_provider,
+                        resolved_model=final_model,
+                        base_url=_client_base or resolved_base_url,
+                        error=retry_err,
+                    )
                     raise
                 first_err = retry_err
 
@@ -3097,6 +3362,49 @@ async def async_call_llm(
                 async_fb, async_fb_model = _to_async_client(fb_client, fb_model or "")
                 if async_fb_model and async_fb_model != fb_kwargs.get("model"):
                     fb_kwargs["model"] = async_fb_model
-                return _validate_llm_response(
-                    await async_fb.chat.completions.create(**fb_kwargs), task)
+                try:
+                    response = _validate_llm_response(
+                        await async_fb.chat.completions.create(**fb_kwargs), task)
+                    _append_auxiliary_call_event(
+                        task=task,
+                        source_mode="async",
+                        status="ok",
+                        started_at=call_started_at,
+                        ended_at=time.time(),
+                        configured_provider=configured_provider,
+                        configured_model=configured_model or resolved_model or model,
+                        resolved_provider=fb_label,
+                        resolved_model=async_fb_model or fb_model,
+                        base_url=str(getattr(fb_client, "base_url", "") or ""),
+                        response=response,
+                    )
+                    return response
+                except Exception as fallback_err:
+                    _append_auxiliary_call_event(
+                        task=task,
+                        source_mode="async",
+                        status="error",
+                        started_at=call_started_at,
+                        ended_at=time.time(),
+                        configured_provider=configured_provider,
+                        configured_model=configured_model or resolved_model or model,
+                        resolved_provider=fb_label,
+                        resolved_model=async_fb_model or fb_model,
+                        base_url=str(getattr(fb_client, "base_url", "") or ""),
+                        error=fallback_err,
+                    )
+                    raise
+        _append_auxiliary_call_event(
+            task=task,
+            source_mode="async",
+            status="error",
+            started_at=call_started_at,
+            ended_at=time.time(),
+            configured_provider=configured_provider,
+            configured_model=configured_model or resolved_model or model,
+            resolved_provider=resolved_provider,
+            resolved_model=final_model,
+            base_url=_client_base or resolved_base_url,
+            error=first_err,
+        )
         raise
