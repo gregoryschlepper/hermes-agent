@@ -12,10 +12,25 @@ weil Marker-Files das bereits erledigte Kennzeichnen.
 | Phase | Beschreibung | Wann | Optional |
 |-------|-------------|------|----------|
 | **1** | Health-Check | Einmal/Tag | Ja (nur wenn Skript existiert + ausführbar) |
-| **2** | Cleanup Ops Dry-Run | Einmal/Tag | Ja (leerer Platzhalter im Template) |
-| **3** | Archive Hygiene Dry-Run | Einmal/Tag | Ja (leerer Platzhalter im Template) |
-| **4** | Project Guard Planung | Einmal/Tag | Ja (leerer Platzhalter im Template) |
+| **2** | Cleanup Ops (Dry-Run) | Einmal/Tag | Ja |
+| **3** | Archive Hygiene Dry-Run | Einmal/Tag | Ja |
+| **4** | Daily Cost Report | Einmal/Tag | Ja |
+| **5** | Project/Documentation Guard (+30m geplant) | Einmal/Tag | Ja |
 | **EXEC** | `exec hermes "$@"` | Immer | Nein |
+
+### JOBS_DIR
+
+Jobs können aus einem gemeinsamen Verzeichnis geladen werden:
+
+```bash
+JOBS_DIR="/path/to/hermes/ops/jobs"
+```
+
+Wenn `JOBS_DIR` gesetzt ist, werden die Job-Pfade automatisch auf
+`${JOBS_DIR}/health_check.sh`, `${JOBS_DIR}/cleanup_ops.py`,
+`${JOBS_DIR}/archive_hygiene.py`, `${JOBS_DIR}/daily_cost_report.py`
+gesetzt. Das Wrapper-Skript bleibt so schlank wie möglich —
+es orchestriert nur, die Logik liegt in den separaten Job-Scripts.
 
 ### +30-Minuten-Guard
 

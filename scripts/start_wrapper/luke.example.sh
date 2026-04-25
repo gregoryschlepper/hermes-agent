@@ -40,6 +40,24 @@ CLEANUP_OPS="/path/to/cleanup_ops.py"
 # Optional: Archive Hygiene — Dry-Run prüft Archivkonsistenz.
 ARCHIVE_HYGIENE="/path/to/archive_hygiene.py"
 
+# Optional: Daily Cost Report — API-Kosten des Vortags.
+DAILY_COST_REPORT="/path/to/daily_cost_report.py"
+
+# =============================================================================
+# JOBS-VERZEICHNIS (generisch)
+# =============================================================================
+# Alternativ können alle Job-Skripte aus einem gemeinsamen Verzeichnis
+# geladen werden. Setze dies auf ops/jobs/ in deiner Hermes-Installation.
+# JOBS_DIR="${HERMES_HOME}/ops/jobs"
+# Wenn JOBS_DIR gesetzt ist, überschreiben die einzelnen Pfade darunter
+# nicht mehr explizit gesetzt werden — JOBS_DIR hat Vorrang.
+if [[ -n "${JOBS_DIR:-}" && -d "$JOBS_DIR" ]]; then
+    HEALTH_CHECK="${HEALTH_CHECK:-$JOBS_DIR/health_check.sh}"
+    CLEANUP_OPS="${CLEANUP_OPS:-$JOBS_DIR/cleanup_ops.py}"
+    ARCHIVE_HYGIENE="${ARCHIVE_HYGIENE:-$JOBS_DIR/archive_hygiene.py}"
+    DAILY_COST_REPORT="${DAILY_COST_REPORT:-$JOBS_DIR/daily_cost_report.py}"
+fi
+
 # =============================================================================
 # MARKER-LOGIK: First-Start-of-Day
 # =============================================================================
@@ -93,7 +111,20 @@ if [[ -n "$ARCHIVE_HYGIENE" && (! -f "$MARKER_ARCHIVE") ]]; then
 fi
 
 # =============================================================================
-# Phase 4: Project Guard Planung (einmal pro Tag)
+# Phase 4: Daily Cost Report (einmal pro Tag, optional)
+# =============================================================================
+# Zeigt die API-Kosten des Vortags — Hauptchat + Auxiliary kombiniert.
+# Das Script schreibt Terminal-Output und Markdown-Report.
+if [[ -n "$DAILY_COST_REPORT" && -f "$DAILY_COST_REPORT" ]]; then
+    echo "[start-wrapper] Phase 4: Running daily cost report..."
+    "$PYTHON_BIN" "$DAILY_COST_REPORT"
+    if [[ $? -ne 0 ]]; then
+        echo "[start-wrapper] WARNING: Cost report exited with non-zero status"
+    fi
+fi
+
+# =============================================================================
+# Phase 5: Project/Documentation Guard Planung (einmal pro Tag)
 # =============================================================================
 # Der Project/Documentation Guard wird 30 Minuten nach dem Start
 # geplant — genug Zeit, dass erste Arbeitsphase abgeschlossen ist.
