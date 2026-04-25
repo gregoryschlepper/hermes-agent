@@ -6,6 +6,45 @@ Zweck: nachvollziehbare Chronik der lokalen Luke-/Hermes-Fork-Änderungen und Be
 
 ---
 
+## 2026-04-25 – Hauptchat-Usage-Logging eingeführt
+
+### Anlass
+
+Bisher wurden nur Auxiliary-/Background-Aufrufe (GLM-FlashX) persistent geloggt. Hauptchat-Aufrufe (Qwen-Modelle) liefen in-memory ohne persistente Spur.
+
+### Änderung
+
+Commit:
+
+```text
+90b72d0c feat: log main chat token usage
+```
+
+Betroffene Datei:
+
+```text
+run_agent.py
+```
+
+Neue Logdatei:
+
+```text
+~/.hermes/logs/main_calls.jsonl
+```
+
+### Neue Datenquelle
+
+`main_calls.jsonl` ist die persistente JSONL-Datei für Hauptchat-/Qwen-Usage.
+Jede Zeile enthält technische Usage-/Kostenfelder: Modell, Provider, Tokenzahlen, geschätzte Kosten, Session-/Task-IDs, Zeitstempel.
+
+**Keine** Prompts, Antworten, API-Keys oder Header werden geloggt.
+
+### Zweck
+
+Grundlage für einen kombinierten Tageskostenreport aus Hauptchat und Auxiliary. Zusammen mit `auxiliary_calls.jsonl` kann später ein vollständiger Tagesreport berechnet werden.
+
+---
+
 ## 2026-04-25 – 0.3-docs-git-ready
 
 ### Anlass

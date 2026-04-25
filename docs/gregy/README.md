@@ -147,13 +147,14 @@ Bekannter aktueller Kurs:
 - GLM-FlashX wird für Auxiliary-/Review-Arbeit genutzt und über ein eigenes Tokenlogging beobachtet.
 - Token-/Kostenklarheit ist Teil der Betriebsfähigkeit, nicht nur nachträgliche Statistik.
 
-Wichtige Datei:
+Wichtige Dateien:
 
 ```text
-~/.hermes/logs/auxiliary_calls.jsonl
+~/.hermes/logs/auxiliary_calls.jsonl   # Auxiliary / GLM-FlashX (agent/auxiliary_client.py)
+~/.hermes/logs/main_calls.jsonl        # Hauptchat / Qwen (run_agent.py)
 ```
 
-Diese Datei wird vom lokalen Patch in `agent/auxiliary_client.py` beschrieben.
+Beide Dateien enthalten nur technische Usage-/Kostenfelder — keine Prompts, Antworten, Keys oder Header. Zusammen bilden sie die Grundlage für einen kombinierten Tageskostenreport.
 
 ---
 

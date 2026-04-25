@@ -192,7 +192,35 @@ Folge:
 
 ## 7. Token- und Kostenlogging
 
-Der GLM-FlashX Auxiliary Tokenlogging-Patch ist wieder integriert.
+### 7.1 Hauptchat (Qwen-Modelle)
+
+Commit:
+
+```text
+90b72d0c feat: log main chat token usage
+```
+
+Betroffene Datei:
+
+```text
+run_agent.py
+```
+
+Logziel:
+
+```text
+~/.hermes/logs/main_calls.jsonl
+```
+
+Prüf-Befehl:
+
+```bash
+tail -1 ~/.hermes/logs/main_calls.jsonl
+```
+
+### 7.2 Auxiliary / Background (GLM-FlashX)
+
+Der GLM-FlashX Auxiliary Tokenlogging-Patch ist integriert.
 
 Commit:
 
@@ -211,6 +239,23 @@ Logziel:
 ```text
 ~/.hermes/logs/auxiliary_calls.jsonl
 ```
+
+### 7.3 Unterschied Hauptchat vs. Auxiliary
+
+| Merkmal | Hauptchat | Auxiliary |
+|---|---|---|
+| Modell | Qwen (OpenRouter) | GLM-FlashX (Zai) |
+| Nutzung | Direkte Gregory-Interaktionen | Memory-Reviews, Skill-Reviews, Background-Jobs |
+| Logdatei | `main_calls.jsonl` | `auxiliary_calls.jsonl` |
+| Logpfad | `~/.hermes/logs/main_calls.jsonl` | `~/.hermes/logs/auxiliary_calls.jsonl` |
+
+### 7.4 Sicherheitsnotiz
+
+Beide Logdateien enthalten **ausschließlich technische Usage-/Kostenfelder**:
+- Modell, Provider, Tokenzahlen, geschätzte Kosten
+- Session-/Task-IDs, Zeitstempel
+
+**Keine** Prompts, **keine** Antworten, **keine** API-Keys, **keine** Header werden geloggt.
 
 Vor dem Commit wurde geprüft:
 
