@@ -1,0 +1,91 @@
+# =============================================================================
+# Project Guard — projects.yaml (example)
+# =============================================================================
+# Kopiere diese Datei als projects.yaml und passe die Platzhalter an.
+# Keine echten Pfade oder Secrets in diese Datei schreiben!
+# =============================================================================
+
+# ——— Globale Defaults ————————————————————————————————————————————————
+global:
+  defaults:
+    remote: origin
+    remote_branch: main
+
+  # Patterns die NIE in einem commit auftauchen dürfen
+  forbidden_patterns:
+    - ".env"
+    - "*.pem"
+    - "*.key"
+    - "id_rsa*"
+    - "secrets.*"
+
+# ——— Projekte —————————————————————————————————————————————————————————
+projects:
+
+  # ─── Beispiel 1: Lokales Projekt ─────────────────────────────────────
+  - name: my-project
+    path: /path/to/my-project
+    branch: main
+    remote: origin
+    remote_branch: main
+
+    # Automatische Doku-Commits (Optionen: enabled, prefix, message-template)
+    auto_doc:
+      enabled: false
+      prefix: "[auto-doc]"
+      message: "Update documentation for {project} — {date}"
+
+    # Dokumentation-Mirror
+    mirror:
+      enabled: false
+      source_paths:
+        - docs/
+        - README.md
+      target: /path/to/documentation-mirror/my-project
+
+    # Doku-Pflege-Einstellungen
+    documentation:
+      enabled: true
+      repo_doc_paths:
+        - docs/README.md
+        - docs/RUNBOOK.md
+        - docs/CHANGELOG.md
+      local_documentation_path: "/path/to/local/documentation"
+      current_subdir: "aktuell"
+      monthly_subdir_format: "%Y-%m"
+      doc_required_for_code_changes: true
+
+  # ─── Beispiel 2: SSH-Remote-Projekt ───────────────────────────────────
+  - name: remote-project
+    location: ssh
+    path: /path/to/remote/project
+    ssh_alias: myserver
+    remote: origin
+    remote_branch: develop
+
+    # Dokumentation-Mirror (SSH-Projekte können ebenfalls gemirrored werden)
+    mirror:
+      enabled: false
+      source_paths:
+        - docs/
+        - spec/
+      target: /path/to/documentation-mirror/remote-project
+
+    # Auto-Doc-Commits
+    auto_doc:
+      enabled: true
+      prefix: "[auto-doc]"
+      message: "Update documentation for {project} — {date}"
+
+    # Doku-Pflege-Einstellungen
+    documentation:
+      enabled: true
+      repo_doc_paths:
+        - docs/README.md
+        - docs/RUNBOOK.md
+        - docs/CHANGELOG.md
+        - docs/API.md
+      local_documentation_path: "/path/to/local/documentation"
+      current_subdir: "aktuell"
+      monthly_subdir_format: "%Y-%m"
+      doc_required_for_code_changes: true

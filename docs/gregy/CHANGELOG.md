@@ -6,6 +6,41 @@ Zweck: nachvollziehbare Chronik der lokalen Luke-/Hermes-Fork-Änderungen und Be
 
 ---
 
+## 2026-04-25 – Generische Ops-Werkzeuge in den Fork übernommen
+
+### Anlass
+
+Die lokalen Luke-Betriebswerkzeuge (Project Guard, Start-Wrapper, Cost Reports) haben sich bewährt und sollen jetzt als generische, wiederverwendbare Zusatzwerkzeuge im Fork verfügbar sein.
+
+### Änderung
+
+Neue Verzeichnisse im Fork (noch untracked):
+```
+scripts/project_guard/
+scripts/start_wrapper/
+scripts/cost_reports/
+```
+
+### Project Guard (`scripts/project_guard/`)
+- `project_guard.py` — generisch, keine persönlichen Pfade
+- `projects.example.yaml` — Beispieldkonfiguration mit lokalem + SSH-Projekt
+- `README.md` + `INSTALL.md` — Dokumentation und Einrichtung
+
+### Start-Wrapper (`scripts/start_wrapper/`)
+- `luke.example.sh` — Template mit Platzhaltern für HERMES_BIN, PROJECT_GUARD, Health-Checks
+- `README.md` — Erklärung der 4 Phasen und +30-Min-Guard-Logik
+
+### Cost Reports (`scripts/cost_reports/`)
+- `luke_daily_cost_report.py` — kombinierter Tagesreport aus main_calls.jsonl + auxiliary_calls.jsonl
+- `README.md` — Erklärung der Logquellen und Sicherheitshinweise
+
+### Bereinigung
+- Alle `/home/gregory/`-Pfade durch `Path.home()` oder `/path/to/`-Platzhalter ersetzt
+- Keine echten Projektnamen (VERITAS, LUKE, FORGE) in Config-Beispielen
+- Keine Secrets, keine .env, keine Logs, keine erzeugten Reports im Fork
+
+---
+
 ## 2026-04-25 – Hauptchat-Usage-Logging eingeführt
 
 ### Anlass

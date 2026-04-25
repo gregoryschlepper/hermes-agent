@@ -19,9 +19,10 @@ Zweck: Bedienung, Checks, Update-/Git-Abläufe, Fehlerbilder und sichere Arbeits
 9. [Dokumentationspflege](#9-dokumentationspflege)
 10. [Remote-/Projektkontexte](#10-remote-projektkontexte)
 11. [ChromeBrowser / Browser-Observer](#11-chromebrowser--browser-observer)
-12. [Häufige Fehlerbilder](#12-häufige-fehlerbilder)
-13. [Abnahmecheckliste](#13-abnahmecheckliste)
-14. [Offene Punkte](#14-offene-punkte)
+12. [Generische Ops-Werkzeuge im Fork](#12-generische-ops-werkzeuge-im-fork)
+13. [Häufige Fehlerbilder](#13-häufige-fehlerbilder)
+14. [Abnahmecheckliste](#14-abnahmecheckliste)
+15. [Offene Punkte](#15-offene-punkte)
 
 ---
 
@@ -355,7 +356,61 @@ Der Nutzen ist aktuell nicht ausreichend. Das Experiment bleibt als externer Ver
 
 ---
 
-## 12. Häufige Fehlerbilder
+## 12. Generische Ops-Werkzeuge im Fork
+
+Die folgenden Werkzeuge sind als generische, entpersonalisierte Templates im Fork unter `scripts/` verfügbar.
+
+### scripts/project_guard/
+
+Zweck: Projektübergreifender Git-Status-Checker + Doku-Guard + Mirror-Sync.
+
+Modi:
+- `--check` — Status, Divergenz, Forbidden-Files
+- `--sync-doc-mirror` — Doku aus Remote-Repos in lokalen Spiegel
+- `--auto-doc-commit` — Auto-Commit für Doku-Dateien (nur allowed_paths)
+- `--sync-doc-current` — Doku → `Dokumentation/aktuell/` + Monatsordner
+- `--doc-impact-check` — Erkennt Code-Änderungen ohne Doku-Commit (DOC_REQUIRED)
+- `--guard-full` — Alle oben genannten Modi in einem Lauf
+
+Config: `projects.yaml` (eigens, nicht im Repo). Beispiel: `projects.example.yaml`.
+
+Lokale Config und Logs bleiben außerhalb des Forks:
+- Config: `~/.config/project_guard/projects.yaml` (eigen)
+- Logs: `~/.hermes/ops/project_guard/` (eigen)
+- Projekt-Dokumentation: `/home/gregory/KI/<PROJEKT>/Dokumentation/` (eigen)
+
+### scripts/start_wrapper/
+
+Zweck: Shell-Wrapper für den ersten Luke-Start des Tages — Health-Checks, Cleanup-Dry-Runs, +30-Min-Guard-Planung.
+
+Template: `luke.example.sh` — Platzhalter für HERMES_BIN, PROJECT_GUARD, Health-Check-Pfade etc. vor dem ersten Einsatz ersetzen.
+
+Ablauf im Wrapper:
+1. Health-Check (einmal/Tag)
+2. Cleanup Ops Dry-Run (einmal/Tag, optional)
+3. Archive-Hygiene Dry-Run (einmal/Tag, optional)
+4. `systemd-run --user --on-active=30m` mit `--guard-full` (einmal/Tag)
+5. `exec "$HERMES_BIN" "$@"` — Luke startet normal
+
+### scripts/cost_reports/
+
+Zweck: Kombinierter Tages-Kostenreport aus `main_calls.jsonl` (Hauptchat) und `auxiliary_calls.jsonl` (Auxiliary).
+
+Script: `luke_daily_cost_report.py [--date YYYY-MM-DD]`
+
+Ausgabe:
+- Terminal: kompakte Tabelle (Calls, Errors, Tokens, Cache-Hit, Kosten)
+- Markdown: `~/.hermes/ops/reports/daily/luke_daily_cost_report_YYYY-MM-DD.md`
+
+Sicherheit: Keine Prompts, keine Antworten, keine API-Keys. Nur lesend, kein Netzwerk, kein Git.
+
+### Hinweis
+
+Alle Scripts unter `scripts/` sind generisch und enthalten keine persönlichen Pfade, keine Projektnamen (VERITAS/LUKE/FORGE als Config-Werte), keine Secrets. Echte lokale Configs, Logs, State-Dateien und erzeugte Reports liegen immer außerhalb des Forks.
+
+---
+
+## 13. Häufige Fehlerbilder
 
 ### 12.1 Falscher Host / gleicher Pfad
 
