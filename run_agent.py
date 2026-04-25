@@ -3526,6 +3526,74 @@ class AIAgent:
         summary["total_tokens"] = cu.total_tokens
         return summary
 
+    # --- main_calls.jsonl: persistent usage logging ---
+
+    _MAIN_CALLS_LOG_PATH = None  # set lazily via get_hermes_home()
+    _MAIN_CALLS_LOG_LOCK = threading.Lock()
+
+    def _log_main_call_to_jsonl(
+        self,
+        canonical_usage: Any,
+        cost_result: Any,
+        api_duration: float,
+    ) -> None:
+        """Append a single JSONL record for the current main-chat API call."""
+        try:
+            from dataclasses import asdict
+
+            usage_dict = asdict(canonical_usage)
+            usage_dict.pop("raw_usage", None)
+
+            now = time.time()
+            started_at = now - api_duration
+            task_id_val = getattr(self, "_current_task_id", None)
+            cost_amount = float(cost_result.amount_usd) if cost_result.amount_usd is not None else None
+
+            record = {
+                "event_id": f"main-{now:.3f}-{self.session_id or 'none'}-{getattr(self, 'session_api_calls', 0)}",
+                "source_mode": "main_chat",
+                "status": "success",
+                "started_at": started_at,
+                "ended_at": now,
+                "duration_ms": round(api_duration * 1000, 1),
+                "provider": self.provider,
+                "model": self.model,
+                "base_url": self.base_url,
+                "input_tokens": canonical_usage.input_tokens,
+                "output_tokens": canonical_usage.output_tokens,
+                "cache_read_tokens": canonical_usage.cache_read_tokens,
+                "cache_write_tokens": canonical_usage.cache_write_tokens,
+                "reasoning_tokens": canonical_usage.reasoning_tokens,
+                "prompt_tokens": canonical_usage.prompt_tokens,
+                "total_tokens": canonical_usage.total_tokens,
+                "estimated_cost_usd": cost_amount,
+                "cost_status": cost_result.status,
+                "cost_source": cost_result.source,
+                "session_id": self.session_id,
+                "task_id": task_id_val,
+                "api_call_index": getattr(self, "session_api_calls", None),
+                "error_message": None,
+            }
+
+            if self._MAIN_CALLS_LOG_PATH is None:
+                from hermes_cli.config import get_hermes_home
+                type(self)._MAIN_CALLS_LOG_PATH = (
+                    get_hermes_home() / "logs" / "main_calls.jsonl"
+                )
+
+            self._MAIN_CALLS_LOG_LOCK.acquire()
+            try:
+                self._MAIN_CALLS_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+                with open(self._MAIN_CALLS_LOG_PATH, "a", encoding="utf-8") as fh:
+                    fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+            finally:
+                self._MAIN_CALLS_LOG_LOCK.release()
+        except Exception as exc:
+            logger.warning(
+                "Failed to write main_calls.jsonl record: %s", exc, exc_info=True
+            )
+
+
     def _dump_api_request_debug(
         self,
         api_kwargs: Dict[str, Any],
@@ -9977,6 +10045,7 @@ class AIAgent:
                             self.session_estimated_cost_usd += float(cost_result.amount_usd)
                         self.session_cost_status = cost_result.status
                         self.session_cost_source = cost_result.source
+                        self._log_main_call_to_jsonl(canonical_usage, cost_result, api_duration)
 
                         # Persist token counts to session DB for /insights.
                         # Do this for every platform with a session_id so non-CLI
