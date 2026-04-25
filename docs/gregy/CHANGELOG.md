@@ -6,6 +6,24 @@ Zweck: nachvollziehbare Chronik der lokalen Luke-/Hermes-Fork-Änderungen und Be
 
 ---
 
+## 2026-04-25 – Cost Report Extra-Output und Start-Wrapper Job-Layout
+
+### Änderung 1: Kostenreport – zusätzliche Ausgabe
+
+`scripts/cost_reports/luke_daily_cost_report.py` unterstützt jetzt `--extra-output-dir PATH`.
+Der Report wird standardmäßig nach `~/.hermes/ops/reports/daily/` geschrieben und zusätzlich
+nach `<PATH>/YYYY-MM/`, falls gesetzt. Bei Fehler: Warnung auf stderr, Standardreport bleibt.
+
+### Änderung 2: Start-Wrapper – generisches JOBS_DIR
+
+`scripts/start_wrapper/luke.example.sh` nutzt jetzt ein gemeinsames `JOBS_DIR`-Verzeichnis.
+- Wenn `JOBS_DIR` gesetzt ist, werden alle Job-Pfade automatisch aufgelöst
+- Neue Phase 4: Daily Cost Report
+- Phase 5: Project/Documentation Guard Planung (+30m)
+- Wrapper bleibt schlanker Orchestrator, keine Job-Logik eingebettet
+
+---
+
 ## 2026-04-25 – Generische Ops-Werkzeuge in den Fork übernommen
 
 ### Anlass

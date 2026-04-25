@@ -385,22 +385,31 @@ Zweck: Shell-Wrapper für den ersten Luke-Start des Tages — Health-Checks, Cle
 
 Template: `luke.example.sh` — Platzhalter für HERMES_BIN, PROJECT_GUARD, Health-Check-Pfade etc. vor dem ersten Einsatz ersetzen.
 
+Generisches JOBS_DIR:
+
+Wenn `JOBS_DIR` gesetzt ist (z. B. `JOBS_DIR="/path/to/hermes/ops/jobs"`), werden alle Job-Pfade automatisch auf die Scripts unter diesem Verzeichnis aufgelöst. Der Wrapper bleibt so schlank wie möglich — er orchestriert nur, die Logik liegt in separaten Job-Scripts.
+
 Ablauf im Wrapper:
 1. Health-Check (einmal/Tag)
-2. Cleanup Ops Dry-Run (einmal/Tag, optional)
+2. Cleanup Ops (einmal/Tag, optional)
 3. Archive-Hygiene Dry-Run (einmal/Tag, optional)
-4. `systemd-run --user --on-active=30m` mit `--guard-full` (einmal/Tag)
-5. `exec "$HERMES_BIN" "$@"` — Luke startet normal
+4. Daily Cost Report (einmal/Tag, optional)
+5. `systemd-run --user --on-active=30m` mit `--guard-full` (einmal/Tag)
+6. `exec "$HERMES_BIN" "$@"` — Luke startet normal
 
 ### scripts/cost_reports/
 
 Zweck: Kombinierter Tages-Kostenreport aus `main_calls.jsonl` (Hauptchat) und `auxiliary_calls.jsonl` (Auxiliary).
 
-Script: `luke_daily_cost_report.py [--date YYYY-MM-DD]`
+Script: `luke_daily_cost_report.py [--date YYYY-MM-DD] [--extra-output-dir /path/to/reports]`
 
 Ausgabe:
 - Terminal: kompakte Tabelle (Calls, Errors, Tokens, Cache-Hit, Kosten)
 - Markdown: `~/.hermes/ops/reports/daily/luke_daily_cost_report_YYYY-MM-DD.md`
+- Extra-Ablage (optional): `<extra-output-dir>/YYYY-MM/luke_daily_cost_report_YYYY-MM-DD.md`
+
+Der `--extra-output-dir`-Parameter ermöglicht eine zweite Ablage in einem beliebigen Verzeichnis,
+automatisch mit Monats-Unterordner. Bei Fehler: Warnung, Standardreport bleibt erhalten.
 
 Sicherheit: Keine Prompts, keine Antworten, keine API-Keys. Nur lesend, kein Netzwerk, kein Git.
 
