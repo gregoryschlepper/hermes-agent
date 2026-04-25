@@ -31,6 +31,23 @@ Ohne `--date` wird gestern als Report-Tag verwendet.
 - Terminal: kompakte Tabelle mit Calls, Errors, Tokens, Cache-Hit, Kosten
 - Markdown-Datei: `~/.hermes/ops/reports/daily/luke_daily_cost_report_YYYY-MM-DD.md`
 
+## Zusätzliche Ausgabe (Business / zweiter Pfad)
+
+Neben der Standard-Ablage kann ein zweiter Ausgabepfad angegeben werden:
+
+```
+python3 luke_daily_cost_report.py --date 2026-04-25 --extra-output-dir /path/to/business/reports
+```
+
+Schreibt zusätzlich nach:
+```
+/path/to/business/reports/2026-04/luke_daily_cost_report_2026-04-25.md
+```
+
+- Monatsordner `YYYY-MM` wird automatisch angelegt
+- Alte Reports werden nie gelöscht
+- Falls die Extra-Ablage fehlschlägt: Warnung auf stderr, Standardreport trotzdem geschrieben
+
 ## Gruppierung
 
 Ergebnisse werden nach Quelle (main / auxiliary) und Modell gruppiert.

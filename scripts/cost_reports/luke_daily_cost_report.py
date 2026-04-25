@@ -217,30 +217,45 @@ def build_report(date_str: str, groups: dict, main_missing: bool, aux_missing: b
     return "\n".join(lines)
 
 
-def save_markdown(date_str: str, report_text: str) -> Path:
-    """Speichert den Report als Markdown."""
-    DAILY_REPORT_DIR.mkdir(parents=True, exist_ok=True)
-    report_file = DAILY_REPORT_DIR / f"luke_daily_cost_report_{date_str}.md"
-
-    # Leichte Markdown-Konvertierung (Terminal → Markdown)
-    md_lines = []
-    md_lines.append(f"# Luke API-Kosten-Report — {date_str}")
-    md_lines.append("")
-    md_lines.append("```")
-    md_lines.append(report_text)
-    md_lines.append("```")
-    md_lines.append("")
-
+def save_markdown(date_str: str, report_text: str, report_dir: Path) -> Path:
+    """Speichert den Report als Markdown im angegebenen Verzeichnis."""
+    report_dir.mkdir(parents=True, exist_ok=True)
+    report_file = report_dir / f"luke_daily_cost_report_{date_str}.md"
+    md_lines = [
+        f"# Luke API-Kosten-Report — {date_str}",
+        "",
+        "```",
+        report_text,
+        "```",
+        ""
+    ]
     with open(report_file, "w", encoding="utf-8") as f:
         f.write("\n".join(md_lines))
-
     return report_file
+
+
+def save_extra_report(date_str: str, report_text: str, extra_dir: Path) -> Path | None:
+    """Speichert den Report zusätzlich unter extra_dir/YYYY-MM/.
+
+    Bei Fehler: Warnung auf stderr, None zurückgeben.
+    """
+    try:
+        month_str = date_str[:7]  # "2026-04"
+        month_dir = extra_dir / month_str
+        return save_markdown(date_str, report_text, month_dir)
+    except Exception as e:
+        print(f"Warnung: Extra-Ausgabe fehlgeschlagen: {e}", file=sys.stderr)
+        print(f"  Standardreport wurde trotzdem geschrieben.", file=sys.stderr)
+        return None
 
 
 def main():
     parser = argparse.ArgumentParser(description="Luke Tages-Kosten-Report (kombiniert)")
     parser.add_argument("--date", type=str, default=None,
                         help="Datum YYYY-MM-DD (default: gestern)")
+    parser.add_argument("--extra-output-dir", type=str, default=None,
+                        help="Zusätzlicher Ausgabepfad. Report wird zusätzlich nach "
+                             "<PATH>/YYYY-MM/ gespeichert.")
     args = parser.parse_args()
 
     target_date = parse_date_arg(args.date)
@@ -281,8 +296,14 @@ def main():
 
     print(report)
     print()
-    report_file = save_markdown(target_date, report)
+    report_file = save_markdown(target_date, report, DAILY_REPORT_DIR)
     print(f"Markdown-Report gespeichert: {report_file}")
+
+    # Zusätzliche Business/Ausgabe-Ablage falls gesetzt
+    if args.extra_output_dir:
+        extra_path = save_extra_report(target_date, report, Path(args.extra_output_dir))
+        if extra_path:
+            print(f"Zusätzliche Ausgabe gespeichert: {extra_path}")
 
     return 0
 
